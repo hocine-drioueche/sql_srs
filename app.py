@@ -1,8 +1,23 @@
-import io
+import  os
+
 import duckdb
+import logging
 import pandas as pd
 import streamlit as st
-import ast
+from datetime import date, timedelta
+
+
+
+if "data" not in os.listdir():
+    print("creating folder data")
+    logging.error(os.listdir())
+    logging.error("creating folder data")
+    os.mkdir("data")
+
+if "exercises_sql_tables.duckdb" not in os.listdir("data"):
+    exec(open("init_db.py").read()) # exec n aime pas pylint
+    # subprocess.run(["python", "init_db.py"])
+
 
 # Connexion à la base de données
 con = duckdb.connect(database="data/exercises_sql_tables.duckdb", read_only=False)
@@ -18,7 +33,7 @@ with st.sidebar:
     st.write("You selected:", theme)
 
     # Récupération de l'exercice pour le thème sélectionné
-    exercise = con.execute(f"SELECT * FROM memory_state WHERE theme='{theme}'").df()
+    exercise = con.execute(f"SELECT * FROM memory_state WHERE theme='{theme}'").df().sort_values("last_reviewed").reset_index()
     st.write(exercise)
 
     exercise_name = exercise.loc[0, "exercise_name"]
@@ -56,7 +71,7 @@ tab2, tab3 = st.tabs(["Tables", "Solution"])
 
 # Onglet Tables
 with tab2:
-    exercise_tables = ast.literal_eval(exercise.loc[0, "tables"])  # Conversion en liste
+    exercise_tables = exercise.loc[0, "tables"]  # Conversion en liste
     for table in exercise_tables:
         st.write(f"Table : {table}")
         df_table = con.execute(f"SELECT * FROM {table}").df()
