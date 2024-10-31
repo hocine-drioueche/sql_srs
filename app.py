@@ -1,90 +1,122 @@
+# Import des modules nécessaires
 import os
-
-import duckdb
 import logging
-import pandas as pd
+import duckdb
 import streamlit as st
 from datetime import date, timedelta
 
-
+# Vérifie si le dossier "data" existe, sinon le crée
 if "data" not in os.listdir():
     print("creating folder data")
     logging.error(os.listdir())
     logging.error("creating folder data")
     os.mkdir("data")
 
+# Initialise la base de données si le fichier n'existe pas dans le dossier "data"
 if "exercises_sql_tables.duckdb" not in os.listdir("data"):
-    exec(open("init_db.py").read())  # exec n aime pas pylint
-    # subprocess.run(["python", "init_db.py"])
+    exec(
+        open("init_db.py").read()
+    )  # Exécute le fichier init_db.py pour créer la base de données
 
-
-# Connexion à la base de données
+# Connexion à la base de données DuckDB
 con = duckdb.connect(database="data/exercises_sql_tables.duckdb", read_only=False)
 
-# Menu latéral pour sélectionner le thème
+
+def check_users_solution(user_query: str) -> None:
+    """
+    Fonction pour vérifier la solution SQL de l'utilisateur en comparant la requête fournie avec la solution.
+    1. Vérifie les colonnes
+    2. Vérifie les valeurs
+    :param user_query: une chaîne contenant la requête SQL de l'utilisateur
+    """
+    result = con.execute(
+        user_query
+    ).df()  # Exécute la requête de l'utilisateur et stocke le résultat
+    st.dataframe(result)  # Affiche le résultat dans Streamlit
+    try:
+        # Compare les colonnes de la solution avec celles du résultat
+        result = result[solution_df.columns]
+        st.dataframe(
+            result.compare(solution_df)
+        )  # Affiche les différences entre les deux dataframes
+        if result.compare(solution_df).shape == (0, 0):
+            st.write("Correct !")  # Affiche un message si la solution est correcte
+            st.balloons()
+    except KeyError as e:
+        st.write("Certaines colonnes manquent")
+    n_lines_difference = result.shape[0] - solution_df.shape[0]
+    if n_lines_difference != 0:
+        st.write(
+            f"Le résultat a une différence de {n_lines_difference} lignes par rapport à la solution"
+        )
+
+
+# Création de la barre latérale pour sélectionner un thème et charger les exercices
 with st.sidebar:
-    available_themes_df =con.execute("SELECT DISTINCT theme FROM memory_state").df()
+    available_themes_df = con.execute(
+        "SELECT DISTINCT theme FROM memory_state"
+    ).df()  # Récupère tous les thèmes disponibles
     theme = st.selectbox(
-        "What would you like to review?",
+        "Quel thème voulez-vous réviser ?",  # Affiche un menu déroulant avec les thèmes
         available_themes_df["theme"].unique(),
-        index=None,  # index=0 par défaut, ajustable selon votre besoin
-        placeholder="Select a theme...",
+        index=None,
+        placeholder="Sélectionnez un thème...",
     )
     if theme:
-        st.write(f"You selected{theme}")
-        select_exercise_query= f"SELECT * FROM memory_state WHERE theme='{theme}'"
-
+        st.write(f"Vous avez sélectionné {theme}")
+        select_exercise_query = f"SELECT * FROM memory_state WHERE theme = '{theme}'"
     else:
         select_exercise_query = f"SELECT * FROM memory_state"
 
+    # Charge les exercices pour le thème sélectionné et trie par date de dernière révision
     exercise = (
-            con.execute(select_exercise_query)
-            .df()
-            .sort_values("last_reviewed")
-            .reset_index(drop=True)
+        con.execute(select_exercise_query)
+        .df()
+        .sort_values("last_reviewed")
+        .reset_index(drop=True)
     )
-
-    st.write(exercise)
-
+    st.write(exercise)  # Affiche les exercices pour révision
     exercise_name = exercise.loc[0, "exercise_name"]
     with open(f"answers/{exercise_name}.sql", "r") as f:
         answer = f.read()
 
-    solution_df = con.execute(answer).df()
+    solution_df = con.execute(answer).df()  # Exécute la solution pour comparaison
 
-
-st.header("Enter your code:")
-query = st.text_area(label="Votre code SQL ici", key="user_input")
+# Interface pour entrer la requête SQL de l'utilisateur
+st.header("Entrez votre code :")
+form = st.form("my_form")
+query = form.text_area(
+    label="Votre code SQL ici", key="user_input"
+)  # Champ de texte pour la requête
+form.form_submit_button("Soumettre")  # Bouton de soumission
 
 if query:
-    # Exécution de la requête SQL de l'utilisateur
-    result = con.execute(query).df()
-    st.dataframe(result)
+    check_users_solution(
+        query
+    )  # Appelle la fonction pour vérifier la solution de l'utilisateur
 
-    try:
-        result = result[solution_df.columns]
-        st.dataframe(result.compare(solution_df))
-    except KeyError as e:
-        st.write("some columns are missing")
-
-    n_lines_difference = result.shape[0] - solution_df.shape[0]
-    if n_lines_difference != 0:
-        st.write(
-            f"result has a {n_lines_difference} lines difference with the solution_df"
+# Boutons pour réviser l'exercice à des dates ultérieures
+for n_days in [2, 7, 21]:
+    if st.button(f"Revoir dans {n_days} jours"):
+        next_review = date.today() + timedelta(days=n_days)
+        con.execute(
+            f"UPDATE memory_state SET last_reviewed = '{next_review}' WHERE exercise_name = '{exercise_name}'"
         )
+        st.rerun()
 
+# Bouton pour réinitialiser la date de dernière révision
+if st.button("Réinitialiser"):
+    con.execute(f"UPDATE memory_state SET last_reviewed = '1970-01-01'")
+    st.rerun()
 
-# Onglets pour afficher les tables et la solution
+# Affiche les tables d'exercice et la solution
 tab2, tab3 = st.tabs(["Tables", "Solution"])
-
-# Onglet Tables
 with tab2:
-    exercise_tables = exercise.loc[0, "tables"]  # Conversion en liste
+    exercise_tables = exercise.loc[0, "tables"]
     for table in exercise_tables:
-        st.write(f"Table : {table}")
+        st.write(f"table: {table}")
         df_table = con.execute(f"SELECT * FROM {table}").df()
         st.dataframe(df_table)
 
-# Onglet Solution
 with tab3:
     st.write(answer)
