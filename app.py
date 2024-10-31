@@ -1,11 +1,10 @@
-import  os
+import os
 
 import duckdb
 import logging
 import pandas as pd
 import streamlit as st
 from datetime import date, timedelta
-
 
 
 if "data" not in os.listdir():
@@ -15,7 +14,7 @@ if "data" not in os.listdir():
     os.mkdir("data")
 
 if "exercises_sql_tables.duckdb" not in os.listdir("data"):
-    exec(open("init_db.py").read()) # exec n aime pas pylint
+    exec(open("init_db.py").read())  # exec n aime pas pylint
     # subprocess.run(["python", "init_db.py"])
 
 
@@ -28,19 +27,24 @@ with st.sidebar:
         "What would you like to review?",
         ("cross_joins", "GroupBy", "Windows functions"),
         index=0,  # index=0 par défaut, ajustable selon votre besoin
-        placeholder="Select a theme..."
+        placeholder="Select a theme...",
     )
     st.write("You selected:", theme)
 
     # Récupération de l'exercice pour le thème sélectionné
-    exercise = con.execute(f"SELECT * FROM memory_state WHERE theme='{theme}'").df().sort_values("last_reviewed").reset_index()
+    exercise = (
+        con.execute(f"SELECT * FROM memory_state WHERE theme='{theme}'")
+        .df()
+        .sort_values("last_reviewed")
+        .reset_index()
+    )
     st.write(exercise)
 
     exercise_name = exercise.loc[0, "exercise_name"]
     with open(f"answers/{exercise_name}.sql", "r") as f:
-            answer = f.read()
+        answer = f.read()
 
-    solution_df =con.execute(answer).df()
+    solution_df = con.execute(answer).df()
 
 
 st.header("Enter your code:")
@@ -51,15 +55,13 @@ if query:
     result = con.execute(query).df()
     st.dataframe(result)
 
-
     try:
-        result= result[solution_df.columns]
+        result = result[solution_df.columns]
         st.dataframe(result.compare(solution_df))
     except KeyError as e:
-        st.write ("some columns are missing")
+        st.write("some columns are missing")
 
-
-    n_lines_difference =result.shape[0]-solution_df.shape[0]
+    n_lines_difference = result.shape[0] - solution_df.shape[0]
     if n_lines_difference != 0:
         st.write(
             f"result has a {n_lines_difference} lines difference with the solution_df"
@@ -79,5 +81,4 @@ with tab2:
 
 # Onglet Solution
 with tab3:
-        st.write(answer)
-
+    st.write(answer)
