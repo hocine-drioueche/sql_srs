@@ -29,15 +29,20 @@ with st.sidebar:
         index=0,  # index=0 par défaut, ajustable selon votre besoin
         placeholder="Select a theme...",
     )
-    st.write("You selected:", theme)
+    if theme:
+        st.write(f"You selected{theme}")
+        select_exercise_query= f"SELECT * FROM memory_state WHERE theme='{theme}'"
 
-    # Récupération de l'exercice pour le thème sélectionné
+    else:
+        select_exercise_query = f"SELECT * FROM memory_state"
+
     exercise = (
-        con.execute(f"SELECT * FROM memory_state WHERE theme='{theme}'")
-        .df()
-        .sort_values("last_reviewed")
-        .reset_index()
+            con.execute(select_exercise_query)
+            .df()
+            .sort_values("last_reviewed")
+            .reset_index(drop=True)
     )
+
     st.write(exercise)
 
     exercise_name = exercise.loc[0, "exercise_name"]
